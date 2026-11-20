@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Sentence Embedding Visualizer</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m4.93 4.93 4.24 4.24'/><path d='m14.83 9.17 4.24-4.24'/><path d='m14.83 14.83 4.24 4.24'/><path d='m9.17 14.83-4.24 4.24'/></svg>" />
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN with configuration -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            background: '#070b14',
+            card: 'rgba(15, 23, 42, 0.75)',
+            primary: {
+              blue: '#3b82f6',
+              cyan: '#06b6d4',
+              emerald: '#10b981',
+              rose: '#f43f5e',
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'monospace'],
+            sans: ['Inter', 'sans-serif'],
+          },
+          boxShadow: {
+            'glow-blue': '0 0 25px -5px rgba(59, 130, 246, 0.5)',
+            'glow-green': '0 0 25px -5px rgba(16, 185, 129, 0.5)',
+            'glow-red': '0 0 25px -5px rgba(244, 63, 94, 0.5)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18, ReactDOM & Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Three.js & OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    body {
+      background-color: #070b14;
+      color: #e2e8f0;
+      overflow-x: hidden;
+      font-family: 'Inter', sans-serif;
+    }
+    .glass-panel {
+      background: rgba(13, 20, 36, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #070b14; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  </style>
+</head>
+<body class="bg-[#070b14] text-slate-100 antialiased min-h-screen">
+  <div id="root"></div>
+
+  <!-- React App JSX Code -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+    const API_BASE_URL = 'http://localhost:8000';
+
+    // SVG Icons
+    const Icons = {
+      Sparkles: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+        </svg>
+      ),
+      Compass: () => (
+        <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" strokeWidth="2" />
+          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" strokeWidth="2" />
+        </svg>
+      ),
+      Binary: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <rect x="4" y="4" width="6" height="6" rx="1" strokeWidth="2" />
+          <rect x="14" y="14" width="6" height="6" rx="1" strokeWidth="2" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 4h6m-3-3v6M4 14h6m-3-3v6" />
+        </svg>
+      ),
+      PlusCircle: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" strokeWidth="2" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v8m-4-4h8" />
+        </svg>
+      ),
+      Trash2: () => (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <polyline points="3 6 5 6 21 6" strokeWidth="2" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      ),
+      RotateCw: ({ spinning }) => (
+        <svg className={`w-3.5 h-3.5 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      ),
+      ZoomIn: () => (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="11" cy="11" r="8" strokeWidth="2" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="2" />
+          <line x1="11" y1="8" x2="11" y2="14" strokeWidth="2" />
+          <line x1="8" y1="11" x2="14" y2="11" strokeWidth="2" />
+        </svg>
+      ),
+      ZoomOut: () => (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="11" cy="11" r="8" strokeWidth="2" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="2" />
+          <line x1="8" y1="11" x2="14" y2="11" strokeWidth="2" />
+        </svg>
+      ),
+      Eye: () => (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" strokeWidth="2" />
+        </svg>
+      ),
+      Copy: () => (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <rect x="9" y="9" width="13" height="13" rx="2" strokeWidth="2" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      ),
+      Check: () => (
+        <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <polyline points="20 6 9 17 4 12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+      Scale: () => (
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v18m-9-9h18M6 12l-3 6h6l-3-6zm12 0l-3 6h6l-3-6z" />
+        </svg>
+      ),
+      Info: () => (
+        <svg className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" strokeWidth="2" />
+          <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" />
+          <line x1="12" y1="8" x2="12.01" y2="8" strokeWidth="2" />
+        </svg>
+      ),
+    };
+
+    // 3D Visualizer Component
+    function EmbeddingVisualizer3D({ points, sentence1Point, sentence2Point, similarityScore }) {
+      const containerRef = useRef(null);
+      const rendererRef = useRef(null);
+      const sceneRef = useRef(null);
+      const cameraRef = useRef(null);
+      const controlsRef = useRef(null);
+      const pointsGroupRef = useRef(null);
+      const labelsGroupRef = useRef(null);
+      const connectionLineRef = useRef(null);
+
+      const [hoveredPoint, setHoveredPoint] = useState(null);
+      const [selectedPoint, setSelectedPoint] = useState(null);
+      const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+      const [autoRotate, setAutoRotate] = useState(false);
+      const [showLabels, setShowLabels] = useState(true);
+      const [showGrid, setShowGrid] = useState(true);
+
+      const createTextSprite = (text, colorHex) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        const fontSize = 32;
+        ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+        const maxChars = 26;
+        const displayText = text.length > maxChars ? text.substring(0, maxChars) + '…' : text;
+        const textWidth = ctx.measureText(displayText).width;
+        const paddingX = 24;
+        const paddingY = 12;
+        canvas.width = textWidth + paddingX * 2;
+        canvas.height = fontSize + paddingY * 2;
+
+        ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+        ctx.fillStyle = 'rgba(7, 11, 20, 0.88)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(0, 0, canvas.width, canvas.height, 12);
+        else ctx.rect(0, 0, canvas.width, canvas.height);
+        ctx.fill();
+
+        ctx.strokeStyle = colorHex;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(displayText, paddingX, canvas.height / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.minFilter = THREE.LinearFilter;
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        const aspect = canvas.width / canvas.height;
+        const spriteHeight = 0.55;
+        sprite.scale.set(spriteHeight * aspect, spriteHeight, 1);
+        return sprite;
+      };
+
+      useEffect(() => {
+        if (!containerRef.current) return;
+        const container = containerRef.current;
+        const width = container.clientWidth;
+        const height = container.clientHeight || 580;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#070b14');
+        scene.fog = new THREE.FogExp2('#070b14', 0.015);
+        sceneRef.current = scene;
+
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.set(16, 12, 20);
+        cameraRef.current = camera;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.innerHTML = '';
+        container.appendChild(renderer.domElement);
+        rendererRef.current = renderer;
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controlsRef.current = controls;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.2);
+        dirLight.position.set(15, 20, 10);
+        scene.add(dirLight);
+
+        const gridGroup = new THREE.Group();
+        gridGroup.name = 'gridGroup';
+        const gridXZ = new THREE.GridHelper(24, 24, 0x38bdf8, 0x1e293b);
+        gridXZ.position.y = -8;
+        gridGroup.add(gridXZ);
+        const centerGrid = new THREE.GridHelper(24, 24, 0x475569, 0x0f172a);
+        centerGrid.position.y = 0;
+        gridGroup.add(centerGrid);
+
+        const axesHelper = new THREE.AxesHelper(12);
+        gridGroup.add(axesHelper);
+        scene.add(gridGroup);
+
+        const pointsGroup = new THREE.Group();
+        scene.add(pointsGroup);
+        pointsGroupRef.current = pointsGroup;
+
+        const labelsGroup = new THREE.Group();
+        scene.add(labelsGroup);
+        labelsGroupRef.current = labelsGroup;
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        const handlePointerMove = (e) => {
+          const rect = renderer.domElement.getBoundingClientRect();
+          mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+          raycaster.setFromCamera(mouse, camera);
+          if (pointsGroupRef.current) {
+            const intersects = raycaster.intersectObjects(pointsGroupRef.current.children, true);
+            if (intersects.length > 0) {
+              const pt = intersects[0].object.userData.pointData;
+              if (pt) {
+                setHoveredPoint(pt);
+                container.style.cursor = 'pointer';
+                return;
+              }
+            }
+          }
+          setHoveredPoint(null);
+          container.style.cursor = 'grab';
+        };
+
+        const handleClick = () => {
+          raycaster.setFromCamera(mouse, camera);
+          if (pointsGroupRef.current) {
+            const intersects = raycaster.intersectObjects(pointsGroupRef.current.children, true);
+            if (intersects.length > 0) {
+              const pt = intersects[0].object.userData.pointData;
+              if (pt) setSelectedPoint(pt);
+            }
+          }
+        };
+
+        renderer.domElement.addEventListener('mousemove', handlePointerMove);
+        renderer.domElement.addEventListener('click', handleClick);
+
+        let reqId;
+        const animate = () => {
+          reqId = requestAnimationFrame(animate);
+          controls.update();
+          if (sceneRef.current && sceneRef.current.userData.autoRotate) {
+            sceneRef.current.rotation.y += 0.003;
+          }
+          renderer.render(scene, camera);
+        };
+        animate();
+
+        const handleResize = () => {
+          if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
+          const w = containerRef.current.clientWidth;
+          const h = containerRef.current.clientHeight || 580;
+          cameraRef.current.aspect = w / h;
+          cameraRef.current.updateProjectionMatrix();
+          rendererRef.current.setSize(w, h);
+        };
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          cancelAnimationFrame(reqId);
+          renderer.domElement.removeEventListener('mousemove', handlePointerMove);
+          renderer.domElement.removeEventListener('click', handleClick);
+          renderer.dispose();
+        };
+      }, []);
+
+      useEffect(() => {
+        if (sceneRef.current) sceneRef.current.userData.autoRotate = autoRotate;
+      }, [autoRotate]);
+
+      useEffect(() => {
+        if (sceneRef.current) {
+          const grid = sceneRef.current.getObjectByName('gridGroup');
+          if (grid) grid.visible = showGrid;
+        }
+      }, [showGrid]);
+
+      useEffect(() => {
+        if (labelsGroupRef.current) labelsGroupRef.current.visible = showLabels;
+      }, [showLabels]);
+
+      useEffect(() => {
+        const pointsGroup = pointsGroupRef.current;
+        const labelsGroup = labelsGroupRef.current;
+        const scene = sceneRef.current;
+        if (!pointsGroup || !labelsGroup || !scene) return;
+
+        while (pointsGroup.children.length > 0) pointsGroup.remove(pointsGroup.children[0]);
+        while (labelsGroup.children.length > 0) labelsGroup.remove(labelsGroup.children[0]);
+
+        if (connectionLineRef.current) {
+          scene.remove(connectionLineRef.current);
+          connectionLineRef.current = null;
+        }
+
+        points.forEach((point) => {
+          const [x, y, z] = point.coordinates;
+          const colorHex = point.type === 'sentence1' ? 0x3b82f6 : point.type === 'sentence2' ? 0x10b981 : 0xf43f5e;
+          const colorString = point.type === 'sentence1' ? '#3b82f6' : point.type === 'sentence2' ? '#10b981' : '#f43f5e';
+          const radius = point.type === 'sentence1' || point.type === 'sentence2' ? 0.42 : 0.35;
+
+          const sphereGeo = new THREE.SphereGeometry(radius, 32, 32);
+          const sphereMat = new THREE.MeshStandardMaterial({
+            color: colorHex,
+            emissive: colorHex,
+            emissiveIntensity: 0.45,
+            roughness: 0.2,
+            metalness: 0.8
+          });
+          const mesh = new THREE.Mesh(sphereGeo, sphereMat);
+          mesh.position.set(x, y, z);
+          mesh.userData = { pointData: point };
+          pointsGroup.add(mesh);
+
+          const sprite = createTextSprite(point.text, colorString);
+          if (sprite) {
+            sprite.position.set(x, y + radius + 0.65, z);
+            labelsGroup.add(sprite);
+          }
+        });
+
+        if (sentence1Point && sentence2Point) {
+          const p1 = new THREE.Vector3(...sentence1Point.coordinates);
+          const p2 = new THREE.Vector3(...sentence2Point.coordinates);
+          const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+          const lineMat = new THREE.LineDashedMaterial({ color: 0x38bdf8, dashSize: 0.4, gapSize: 0.2, transparent: true, opacity: 0.7 });
+          const line = new THREE.Line(lineGeo, lineMat);
+          line.computeLineDistances();
+          scene.add(line);
+          connectionLineRef.current = line;
+        }
+      }, [points, sentence1Point, sentence2Point]);
+
+      return (
+        <div className="relative w-full h-[600px] rounded-2xl overflow-hidden glass-panel border border-cyan-500/20 shadow-2xl">
+          <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+
+          {/* Floating Controls Top Right */}
+          <div className="absolute top-4 right-4 flex flex-wrap items-center gap-2 bg-slate-900/80 backdrop-blur-md p-1.5 rounded-xl border border-white/10 z-10">
+            <button
+              onClick={() => setAutoRotate(!autoRotate)}
+              className={`p-2 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${autoRotate ? 'bg-cyan-500 text-white shadow-glow-blue' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Icons.RotateCw spinning={autoRotate} />
+              <span>{autoRotate ? 'Rotating' : 'Rotate'}</span>
+            </button>
+            <button
+              onClick={() => setShowLabels(!showLabels)}
+              className={`p-2 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${showLabels ? 'bg-slate-700 text-cyan-300' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Icons.Eye />
+              <span>Labels</span>
+            </button>
+            <button
+              onClick={() => setShowGrid(!showGrid)}
+              className={`p-2 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${showGrid ? 'bg-slate-700 text-cyan-300' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <span>Grid</span>
+            </button>
+            <button
+              onClick={() => {
+                if (cameraRef.current && controlsRef.current) {
+                  cameraRef.current.position.set(16, 12, 20);
+                  controlsRef.current.target.set(0, 0, 0);
+                  controlsRef.current.update();
+                }
+              }}
+              className="px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-all border border-slate-700"
+            >
+              Reset
+            </button>
+          </div>
+
+          {/* Legend Top Left */}
+          <div className="absolute top-4 left-4 bg-slate-900/85 backdrop-blur-md p-3.5 rounded-xl border border-white/10 z-10 max-w-xs">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center justify-between">
+              <span>Legend</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">384D &rarr; 3D</span>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="w-3.5 h-3.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] shrink-0" />
+                <span className="text-slate-200 font-medium">Sentence 1 (Blue)</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] shrink-0" />
+                <span className="text-slate-200 font-medium">Sentence 2 (Green)</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-3.5 h-3.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e] shrink-0" />
+                <span className="text-slate-200 font-medium">Added Words / Sentences (Red)</span>
+              </div>
+            </div>
+            {similarityScore !== undefined && similarityScore !== null && (
+              <div className="mt-3 pt-2.5 border-t border-slate-800 text-[11px] flex items-center justify-between text-slate-300">
+                <span>384D Cosine Similarity:</span>
+                <span className="font-mono font-bold text-cyan-400 text-xs">{(similarityScore * 100).toFixed(1)}%</span>
+              </div>
+            )}
+          </div>
+
+          {/* Mathematical Notice Bottom Right */}
+          <div className="absolute bottom-4 right-4 max-w-sm bg-slate-900/85 backdrop-blur-md p-2.5 rounded-xl border border-cyan-500/20 text-[11px] text-slate-300 leading-relaxed shadow-lg">
+            <span className="font-semibold text-cyan-300">Deterministic PCA Projection: </span>
+            The 3D coordinates are projected using a frozen PCA basis fitted once on a diverse reference corpus.
+            Points never move when new items are added. Cosine similarity is calculated directly on the original 384-dimensional vectors.
+          </div>
+
+          {/* Hover Tooltip */}
+          {hoveredPoint && (
+            <div className="absolute z-30 pointer-events-none transform -translate-x-1/2 -translate-y-full -mt-3" style={{ left: `${mousePos.x}px`, top: `${mousePos.y}px` }}>
+              <div className="glass-panel p-3 rounded-xl border border-cyan-400/50 shadow-2xl min-w-[200px] max-w-xs text-left">
+                <p className="text-xs text-white font-medium mb-1">"{hoveredPoint.text}"</p>
+                <div className="text-[10px] text-slate-300 font-mono bg-slate-950 p-1.5 rounded flex justify-between">
+                  <span>X: {hoveredPoint.coordinates[0].toFixed(2)}</span>
+                  <span>Y: {hoveredPoint.coordinates[1].toFixed(2)}</span>
+                  <span>Z: {hoveredPoint.coordinates[2].toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Click Details Modal */}
+          {selectedPoint && (
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+              <div className="glass-panel p-6 rounded-2xl border border-cyan-500/30 max-w-lg w-full text-left relative shadow-2xl">
+                <button onClick={() => setSelectedPoint(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1">✕</button>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-slate-200 mb-2">Sentence Details</h4>
+                <div className="text-sm font-medium text-white bg-slate-950 p-3 rounded-xl border border-slate-800 mb-4">"{selectedPoint.text}"</div>
+                <div className="grid grid-cols-3 gap-2 mb-4 font-mono text-xs">
+                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center"><div className="text-[10px] text-cyan-400">X</div><div className="text-white font-bold">{selectedPoint.coordinates[0].toFixed(4)}</div></div>
+                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center"><div className="text-[10px] text-emerald-400">Y</div><div className="text-white font-bold">{selectedPoint.coordinates[1].toFixed(4)}</div></div>
+                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center"><div className="text-[10px] text-rose-400">Z</div><div className="text-white font-bold">{selectedPoint.coordinates[2].toFixed(4)}</div></div>
+                </div>
+                <div className="text-xs text-slate-400 mb-1">Raw 384-D Vector (Sample):</div>
+                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] text-cyan-300 max-h-20 overflow-y-auto flex flex-wrap gap-1">
+                  {selectedPoint.rawEmbedding.slice(0, 16).map((v, i) => <span key={i}>[{i}]: {v.toFixed(4)}</span>)}
+                  <span className="text-slate-500">... +368 more</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Main App Component
+    function App() {
+      const [backendOnline, setBackendOnline] = useState(null);
+      const [sentence1Text, setSentence1Text] = useState("Artificial intelligence models learn complex linguistic representations.");
+      const [sentence1Data, setSentence1Data] = useState(null);
+      const [loading1, setLoading1] = useState(false);
+      const [error1, setError1] = useState(null);
+
+      const [sentence2Text, setSentence2Text] = useState("Machine learning algorithms extract semantic features from natural language data.");
+      const [sentence2Data, setSentence2Data] = useState(null);
+      const [loading2, setLoading2] = useState(false);
+      const [error2, setError2] = useState(null);
+
+      const [similarityData, setSimilarityData] = useState(null);
+      const [customPoints, setCustomPoints] = useState([]);
+      const [customText, setCustomText] = useState("");
+      const [loadingCustom, setLoadingCustom] = useState(false);
+      const [showFullVector, setShowFullVector] = useState(false);
+      const [copied, setCopied] = useState(false);
+
+      useEffect(() => {
+        const checkHealth = async () => {
+          try {
+            const res = await fetch(`${API_BASE_URL}/health`);
+            setBackendOnline(res.ok);
+          } catch {
+            setBackendOnline(false);
+          }
+        };
+        checkHealth();
+        const id = setInterval(checkHealth, 5000);
+        return () => clearInterval(id);
+      }, []);
+
+      const computeSim = async (emb1, emb2, t1, t2) => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/similarity`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ embedding1: emb1, embedding2: emb2, text1: t1, text2: t2 })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setSimilarityData(data);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const handleGenerate1 = async (e) => {
+        if (e) e.preventDefault();
+        if (!sentence1Text.trim() || loading1) return;
+        setLoading1(true);
+        setError1(null);
+        try {
+          const res = await fetch(`${API_BASE_URL}/embed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: sentence1Text.trim() })
+          });
+          if (!res.ok) throw new Error('Failed to generate embedding');
+          const data = await res.json();
+          setSentence1Data(data);
+          if (sentence2Data?.embedding) {
+            await computeSim(data.embedding, sentence2Data.embedding, data.text, sentence2Data.text);
+          }
+        } catch (err) {
+          setError1(err.message);
+        } finally {
+          setLoading1(false);
+        }
+      };
+
+      const handleTokenize2 = async (e) => {
+        if (e) e.preventDefault();
+        if (!sentence2Text.trim() || loading2) return;
+        setLoading2(true);
+        setError2(null);
+        try {
+          const res = await fetch(`${API_BASE_URL}/tokenize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: sentence2Text.trim() })
+          });
+          if (!res.ok) throw new Error('Failed to tokenize sentence');
+          const data = await res.json();
+          setSentence2Data(data);
+          if (sentence1Data?.embedding) {
+            await computeSim(sentence1Data.embedding, data.embedding, sentence1Data.text, data.text);
+          }
+        } catch (err) {
+          setError2(err.message);
+        } finally {
+          setLoading2(false);
+        }
+      };
+
+      const handleAddCustom = async (textToAdd) => {
+        const text = (textToAdd || customText).trim();
+        if (!text || loadingCustom) return;
+        setLoadingCustom(true);
+        try {
+          const res = await fetch(`${API_BASE_URL}/embed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+          });
+          if (!res.ok) throw new Error('Failed to embed point');
+          const data = await res.json();
+          const pt = {
+            id: `custom-${Date.now()}-${Math.random()}`,
+            text: data.text,
+            type: 'custom',
+            color: '#f43f5e',
+            coordinates: data.projection_3d,
+            rawEmbedding: data.embedding,
+          };
+          setCustomPoints(prev => [...prev, pt]);
+          setCustomText("");
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingCustom(false);
+        }
+      };
+
+      const s1Point = useMemo(() => sentence1Data ? {
+        id: 'sentence-1',
+        text: sentence1Data.text,
+        type: 'sentence1',
+        coordinates: sentence1Data.projection_3d,
+        rawEmbedding: sentence1Data.embedding,
+      } : undefined, [sentence1Data]);
+
+      const s2Point = useMemo(() => sentence2Data ? {
+        id: 'sentence-2',
+        text: sentence2Data.text,
+        type: 'sentence2',
+        coordinates: sentence2Data.projection_3d,
+        rawEmbedding: sentence2Data.embedding,
+      } : undefined, [sentence2Data]);
+
+      const allPoints = useMemo(() => {
+        const list = [];
+        if (s1Point) list.push(s1Point);
+        if (s2Point) list.push(s2Point);
+        return [...list, ...customPoints];
+      }, [s1Point, s2Point, customPoints]);
+
+      const bothEmbeddingsExist = Boolean(s1Point && s2Point);
+
+      return (
+        <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col font-sans">
+          {/* Header */}
+          <header className="sticky top-0 z-50 glass-panel border-b border-white/10 px-4 sm:px-8 py-3.5 backdrop-blur-xl">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-cyan-500 to-emerald-400 p-0.5 shadow-glow-blue flex items-center justify-center">
+                  <div className="w-full h-full bg-[#070b14] rounded-[10px] flex items-center justify-center">
+                    <Icons.Compass />
+                  </div>
+                </div>
+                <div>
+                  <h1 className="text-base sm:text-lg font-extrabold text-white">AI Sentence Embedding Visualizer</h1>
+                  <p className="text-xs text-slate-400">all-MiniLM-L6-v2 (384D) &bull; Fixed 3D PCA Projection</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+                <span className="text-xs font-mono text-slate-300">{backendOnline ? 'Inference Engine Online' : 'Connecting to Backend (Port 8000)...'}</span>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-8 space-y-12">
+            {/* Hero */}
+            <div className="text-center py-4 max-w-3xl mx-auto space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-800 text-cyan-300 text-xs font-medium">
+                <Icons.Sparkles />
+                <span>Real-Time Machine Learning Educational Platform</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white">Explore How AI Embeds and Understands Sentences</h2>
+              <p className="text-slate-400 text-sm">Convert sentences into 384-dimensional dense vectors, inspect token IDs, compute high-dimensional cosine similarity, and visualize points in 3D WebGL space.</p>
+            </div>
+
+            {/* SECTION 1 */}
+            <section className="glass-panel p-6 sm:p-8 rounded-3xl border border-blue-500/30 shadow-2xl relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/40 font-bold flex items-center justify-center">1</div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Sentence 1: Generate Embedding</h3>
+                    <p className="text-xs text-slate-400">Produces real 384-dimensional vector &bull; Plotted as Blue Point</p>
+                  </div>
+                </div>
+                {sentence1Data && <span className="px-3 py-1 bg-blue-950 text-blue-300 rounded-xl border border-blue-800 text-xs font-mono font-bold">Dimensions: {sentence1Data.dimensions}D</span>}
+              </div>
+
+              <form onSubmit={handleGenerate1} className="mb-4">
+                <textarea
+                  value={sentence1Text}
+                  onChange={e => setSentence1Text(e.target.value)}
+                  rows={2}
+                  placeholder="Enter your first sentence..."
+                  className="w-full bg-slate-950/80 border border-slate-700 focus:border-blue-500 rounded-2xl p-4 text-white text-sm outline-none resize-none"
+                />
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-slate-500 font-mono">{sentence1Text.length} characters</span>
+                  <button
+                    type="submit"
+                    disabled={loading1 || !sentence1Text.trim()}
+                    className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-glow-blue"
+                  >
+                    {loading1 ? 'Generating...' : 'Generate Embedding'}
+                  </button>
+                </div>
+              </form>
+
+              {sentence1Data && (
+                <div className="bg-slate-950/90 rounded-2xl p-5 border border-blue-500/30">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-sm font-semibold text-white">Actual 384-D Vector (L2-Normalized)</span>
+                    <button
+                      onClick={() => setShowFullVector(!showFullVector)}
+                      className="text-xs px-2.5 py-1 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg"
+                    >
+                      {showFullVector ? 'Collapse' : 'Show All 384 Dims'}
+                    </button>
+                  </div>
+                  <div className="text-xs font-mono text-cyan-400 bg-blue-950/30 p-2.5 rounded-xl border border-blue-900/50 mb-3">
+                    Projected 3D Coordinates: X: {sentence1Data.projection_3d[0].toFixed(3)}, Y: {sentence1Data.projection_3d[1].toFixed(3)}, Z: {sentence1Data.projection_3d[2].toFixed(3)}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto grid grid-cols-4 sm:grid-cols-8 gap-1.5 font-mono text-xs text-slate-300">
+                    {(showFullVector ? sentence1Data.embedding : sentence1Data.embedding.slice(0, 32)).map((v, i) => (
+                      <div key={i} className="p-1 bg-slate-900/80 rounded border border-slate-800 flex justify-between">
+                        <span className="text-slate-500 text-[10px]">[{i}]</span>
+                        <span className={v >= 0 ? 'text-cyan-300' : 'text-blue-400'}>{v.toFixed(4)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* SECTION 2 */}
+            <section className="glass-panel p-6 sm:p-8 rounded-3xl border border-emerald-500/30 shadow-2xl relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold flex items-center justify-center">2</div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Sentence 2: Generate Tokens & Compute Similarity</h3>
+                    <p className="text-xs text-slate-400">Token breakdown, WordPiece token IDs &bull; Plotted as Green Point</p>
+                  </div>
+                </div>
+                {sentence2Data && (
+                  <div className="flex items-center gap-2 font-mono text-xs">
+                    <span className="px-2.5 py-1 bg-emerald-950 text-emerald-300 rounded-xl border border-emerald-800">Tokens: {sentence2Data.token_count}</span>
+                    <span className="px-2.5 py-1 bg-emerald-950 text-emerald-300 rounded-xl border border-emerald-800">Chars: {sentence2Data.char_count}</span>
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleTokenize2} className="mb-4">
+                <textarea
+                  value={sentence2Text}
+                  onChange={e => setSentence2Text(e.target.value)}
+                  rows={2}
+                  placeholder="Enter your second sentence..."
+                  className="w-full bg-slate-950/80 border border-slate-700 focus:border-emerald-500 rounded-2xl p-4 text-white text-sm outline-none resize-none"
+                />
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-slate-500 font-mono">{sentence2Text.length} characters</span>
+                  <button
+                    type="submit"
+                    disabled={loading2 || !sentence2Text.trim()}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-glow-green"
+                  >
+                    {loading2 ? 'Tokenizing...' : 'Generate Tokens'}
+                  </button>
+                </div>
+              </form>
+
+              {sentence2Data && (
+                <div className="space-y-4">
+                  <div className="bg-slate-950/90 rounded-2xl p-4 border border-emerald-500/30">
+                    <div className="text-xs font-semibold text-slate-300 mb-2">WordPiece Model Tokens & Vocabulary IDs:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {sentence2Data.tokens.map((tok, i) => (
+                        <div key={i} className="flex flex-col items-center px-2.5 py-1.5 rounded-xl border bg-slate-900 border-slate-700 text-white text-xs">
+                          <span className="font-mono font-semibold text-emerald-300">{tok}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">ID: {sentence2Data.token_ids[i]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {similarityData && (
+                    <div className="bg-slate-950 rounded-2xl p-5 border border-cyan-500/40">
+                      <div className="flex justify-between items-center mb-3">
+                        <div>
+                          <h4 className="text-base font-bold text-white">Cosine Semantic Similarity</h4>
+                          <p className="text-xs text-slate-400">Calculated directly in original 384-dimensional space</p>
+                        </div>
+                        <div className="text-2xl font-extrabold text-cyan-400 font-mono">{similarityData.similarity.toFixed(4)}</div>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5 border border-slate-700 mb-3">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-all duration-1000"
+                          style={{ width: `${Math.max(4, Math.min(100, (similarityData.similarity + 1) / 2 * 100))}%` }}
+                        />
+                      </div>
+                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-700 text-xs text-slate-200">
+                        {similarityData.explanation}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* SECTION 3 */}
+            <section className="glass-panel p-6 sm:p-8 rounded-3xl border border-cyan-500/40 shadow-2xl relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-bold flex items-center justify-center">3</div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Interactive 3D Embedding Visualization</h3>
+                    <p className="text-xs text-slate-400">WebGL Three.js Canvas &bull; OrbitControls</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-slate-900 text-slate-300 rounded-xl border border-slate-700 text-xs font-mono font-bold">Active Points: {allPoints.length}</span>
+              </div>
+
+              {bothEmbeddingsExist ? (
+                <EmbeddingVisualizer3D
+                  points={allPoints}
+                  sentence1Point={s1Point}
+                  sentence2Point={s2Point}
+                  similarityScore={similarityData?.similarity}
+                />
+              ) : (
+                <div className="p-12 text-center rounded-2xl bg-slate-950/60 border border-dashed border-slate-800">
+                  <div className="text-slate-400 text-sm mb-2">Awaiting Embeddings</div>
+                  <p className="text-xs text-slate-500">Generate embeddings for both Sentence 1 (Blue) and Sentence 2 (Green) above to view the 3D space.</p>
+                </div>
+              )}
+            </section>
+
+            {/* SECTION 4 */}
+            <section className="glass-panel p-6 sm:p-8 rounded-3xl border border-rose-500/30 shadow-2xl relative">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold flex items-center justify-center">4</div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Add More Words or Sentences</h3>
+                    <p className="text-xs text-slate-400">Projects onto SAME frozen 3D basis &bull; Plotted as Red Points</p>
+                  </div>
+                </div>
+                {customPoints.length > 0 && (
+                  <button onClick={() => setCustomPoints([])} className="px-3 py-1 bg-slate-900 hover:bg-rose-950 text-slate-300 hover:text-rose-300 rounded-xl border border-slate-700 text-xs">
+                    Clear Added ({customPoints.length})
+                  </button>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customText}
+                    onChange={e => setCustomText(e.target.value)}
+                    placeholder="Enter another word or sentence..."
+                    className="flex-1 bg-slate-950/80 border border-slate-700 focus:border-rose-500 rounded-xl p-3 text-white text-sm outline-none"
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddCustom(); }}
+                  />
+                  <button
+                    onClick={() => handleAddCustom()}
+                    disabled={loadingCustom || !customText.trim()}
+                    className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-pink-600 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-glow-red"
+                  >
+                    {loadingCustom ? 'Adding...' : 'Add to Graph'}
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="text-slate-500">Quick suggestions:</span>
+                  {["A fluffy kitten napping in the sun", "Telescopes searching for distant exoplanets", "Python programming and backend API development"].map((p, i) => (
+                    <button key={i} onClick={() => handleAddCustom(p)} className="px-2 py-1 bg-slate-900 border border-slate-800 text-slate-300 rounded hover:text-white">
+                      "{p.slice(0, 28)}…"
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {customPoints.length > 0 && (
+                <div className="bg-slate-950/90 rounded-2xl p-4 border border-rose-500/30 space-y-2">
+                  <div className="text-xs font-bold uppercase text-slate-400 mb-2">Plotted Red Points ({customPoints.length})</div>
+                  {customPoints.map(pt => (
+                    <div key={pt.id} className="flex items-center justify-between p-2.5 bg-slate-900 rounded-xl border border-slate-800 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-rose-500" />
+                        <span className="text-white font-medium">"{pt.text}"</span>
+                      </div>
+                      <div className="flex items-center gap-3 font-mono text-slate-400 text-[11px]">
+                        <span>[{pt.coordinates[0].toFixed(2)}, {pt.coordinates[1].toFixed(2)}, {pt.coordinates[2].toFixed(2)}]</span>
+                        <button onClick={() => setCustomPoints(prev => prev.filter(p => p.id !== pt.id))} className="text-slate-500 hover:text-rose-400">✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
